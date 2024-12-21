@@ -1,165 +1,126 @@
-# sumaary
 import pyodbc
 import pandas as pd
-import time
 import os
 import tkinter as tk
+from tkinter import messagebox
+from tkinter.ttk import Treeview
+from pygame import mixer
 
+# Database connection
+elec_file_out_path = 'C:\\30_seconds'
+server = 'LAB105JWZGK3'
+database = '30_Seconds'
+trusted_connection = 'Yes'
+cnxn = pyodbc.connect(
+    f'DRIVER={{SQL Server}};SERVER={server};DATABASE={database};trusted_connection={trusted_connection}'
+)
 
-date_var = None ##'2023-05-12'
+# Tkinter App
+class GameApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("30 Seconds Game")
+        self.game_id = None
+        self.player_id = 1
+        self.score = 0
 
-import pandas as pd
-#from pyathena import connect
-import numpy as np
-from datetime import datetime, timedelta
-from dateutil.relativedelta import *
-import subprocess
-from subprocess import PIPE
+        self.setup_ui()
 
-elec_file_out_path = 'C:\30_seconds'
-server = 'LAB105JWZGK3' 
-database = '30_Seconds' 
-trusted_connection = 'Yes' 
-games = 'select max(game_id) game_id from game'
+    def setup_ui(self):
+        """Set up the main UI elements"""
+        # Game Selection Frame
+        self.game_frame = tk.Frame(self.root)
+        self.game_frame.pack(pady=10)
 
-cnxn = pyodbc.connect('DRIVER={SQL Server};SERVER='+server+';DATABASE='+database+';trusted_connection = Yes')
+        self.game_label = tk.Label(self.game_frame, text="Select Game:")
+        self.game_label.grid(row=0, column=0, padx=5)
 
-cursor = cnxn.cursor()
+        self.game_combo = tk.StringVar()
+        self.game_dropdown = tk.OptionMenu(self.game_frame, self.game_combo, *self.get_game_list())
+        self.game_dropdown.grid(row=0, column=1, padx=5)
 
-#To identify the player
-player_id = 1
-add_player ='y'
-cont = "y" 
-game_data = 'select game_id [ID], game_name [Game Name ] from game'
-df = pd.read_sql(game_data,cnxn)
-score = 0
+        self.start_button = tk.Button(self.game_frame, text="Start Game", command=self.start_game)
+        self.start_button.grid(row=0, column=2, padx=5)
 
-print("Commencing Extracting game data....")
-game_data = 'select game_id [ID],game_name [Game Name] from game'
-df = pd.read_sql(game_data,cnxn)
+        self.create_game_button = tk.Button(self.game_frame, text="Create Game", command=self.create_game)
+        self.create_game_button.grid(row=0, column=3, padx=5)
 
-def play_game(game_id,player_id):
-    from pygame import mixer #load the popular external library
-    
-    mixer.init()
-    mixer.music.load("C:/30_seconds/drum-roll.mp3")
-    mixer.music.play()  
+        # Achievements Frame
+        self.achievement_frame = tk.Frame(self.root)
+        self.achievement_frame.pack(pady=10)
 
-    #throw dice
-    ans = input("press any key to roll a dice:\n")
-    roll = 'select dbo.fn_roll_dice() dice_roll'
-    df_roll = pd.read_sql(roll,cnxn)
+        self.achievement_label = tk.Label(self.achievement_frame, text="Player Achievements")
+        self.achievement_label.pack()
 
-    die_roll = df_roll["dice_roll"][0]
-    print("you dice number: " + str(die_roll))
+        self.tree = Treeview(self.achievement_frame, columns=("Player", "Score", "Stars"), show="headings")
+        self.tree.heading("Player", text="Player")
+        self.tree.heading("Score", text="Score")
+        self.tree.heading("Stars", text="Stars")
+        self.tree.pack()
 
-    #Card Flip
-    ans = input("press any key to flip the card:\n")
-    os.system('cls||clear')
+    def get_game_list(self):
+        """Fetch the list of games from the database"""
+        df = pd.read_sql("SELECT game_id, game_name FROM game", cnxn)
+        return [f"{row['game_id']} - {row['game_name']}" for _, row in df.iterrows()]
 
-    # A stored procedure 
-    cnxn.execute('exec sp_generate_card')
-    cnxn.commit()
-    df_card = pd.read_sql('select * from temp_card',cnxn)
+    def start_game(self):
+        """Start the selected game"""
+        if not self.game_combo.get():
+            messagebox.showerror("Error", "Please select a game.")
+            return
 
-    print(df_card)
+        self.game_id = int(self.game_combo.get().split(" - ")[0])
+        self.play_game()
 
-    import time
-    time.sleep(30)
+    def create_game(self):
+        """Create a new game"""
+        new_game_window = tk.Toplevel(self.root)
+        new_game_window.title("Create Game")
 
-    os.system('cls|| clear')
+        tk.Label(new_game_window, text="Game Name:").grid(row=0, column=0, padx=5, pady=5)
+        game_name_entry = tk.Entry(new_game_window)
+        game_name_entry.grid(row=0, column=1, padx=5, pady=5)
 
-    #Score Entry
-    score = input("Enter score:")
-    score = int(score)
-    
-    player_id = int(player_id)
-    die_roll = int(die_roll)
-    #Minus current score by dice number
-    p_score = score - die_roll
-    print("Your updated score is: " + str(p_score))
-    cnxn.execute("exec sp_add_score ?, ?, ?, ?;",(game_id, player_id, die_roll, p_score))
-#cnxn.execute("exec sp_create_game ?, ?;", (game_name, game_desc))
+        tk.Label(new_game_window, text="Game Description:").grid(row=1, column=0, padx=5, pady=5)
+        game_desc_entry = tk.Entry(new_game_window)
+        game_desc_entry.grid(row=1, column=1, padx=5, pady=5)
 
-    cnxn.commit()
+        def save_game():
+            game_name = game_name_entry.get()
+            game_desc = game_desc_entry.get()
 
-    if score > 3:
+            if not game_name or not game_desc:
+                messagebox.showerror("Error", "All fields are required.")
+                return
+
+            cursor = cnxn.cursor()
+            cursor.execute("EXEC sp_create_game ?, ?", (game_name, game_desc))
+            cnxn.commit()
+            messagebox.showinfo("Success", "Game created successfully!")
+            new_game_window.destroy()
+
+        tk.Button(new_game_window, text="Save", command=save_game).grid(row=2, column=0, columnspan=2, pady=10)
+
+    def play_game(self):
+        """Play the game"""
         mixer.init()
-        #  mixer.music.load("\\C:\30_seconds\\mega-horn-angry-siren.mp3")
-        mixer.music.load("C:/30_seconds/mega-horn-angry-siren.mp3")
+        mixer.music.load("./drumroll-93348.mp3")
         mixer.music.play()
 
+        dice_roll = pd.read_sql("SELECT dbo.fn_roll_dice() AS dice_roll", cnxn).iloc[0]["dice_roll"]
+        messagebox.showinfo("Dice Roll", f"You rolled: {dice_roll}")
 
-print("\n\nWelcome to 30 Seconds\n")
+        score = int(self.score) - dice_roll
+        self.score = score
 
-print(df.to_string(index=False))
-
-game_id = input("\n\nSelect Game or press 0 to create a new one: \n")
-
-if game_id == "0":
-    print("Creating New Game")
-    game_name = input("Please Enter Game Name: ")  
-    game_desc = input("Please Enter Game Description: ")  
-    cursor = cnxn.cursor()
-    num_of_teams = input("What is the number of teams to play?")
-    num_of_teams = int(num_of_teams)
-
-    while num_of_teams < 5:
-        print("Creating new team\n")
-        team_name = input("Enter team name:")
-        team_desc = input("Enter Team Description: ")
-        cnxn.execute("exec sp_create_team ?, ?;", (team_name, int(game_id)))
-        num_of_teams = num_of_teams - 1
-        #cursor = cnxn.cursor()
-
-        team_scr = "select max(team_id) team_id from tbl_team"
-        df_team = pd.read_sql(team_scr,cnxn)
-        team_id = df_team["team_id"][0]
-        add_player = "y"
-
-        while add_player == "y":
-            print("\nAdd player")
-            player_name = input("Enter Player Name: ")
-            email = input("Enter Email: ")
-            
-            cnxn.execute("exec sp_add_player ?, ?, ?;", (player_name, email, int(team_id)))
+        # Update achievements
+        self.tree.insert("", "end", values=("Player 1", score, "⭐" * min(score, 5)))
         
-            add_player = input(f"\nWould you like to add a new player to the team? (team name)? (y/n)")
-        num_of_teams = num_of_teams + 1
-        cnxn.commit()
-    
-    cnxn.execute("exec sp_create_game ?, ?;", (game_name, game_desc))
-    #time.sleep(30)
-    cnxn.commit()
-    
-    df_games = pd.read_sql(games,cnxn)
-    
-    game_id = df_games["game_id"][0]
-    print(str(game_id))
-    
-    
+        if score > 3:
+            mixer.music.load("./mega-horn-angry-siren-f-cinematic-trailer-sound-effects-193408.mp3")
+            mixer.music.play()
 
-else:  
-    print("Old Game")
-    game_id = input('select game_id from game')
-       
-    df_games = pd.read_sql(games,cnxn)
-    
-    if df_games.astype(str).isin([game_id]).any().any():
-        game_id = int(game_id) 
-        print("Starting game\n")
-        play_game(game_id,player_id)
-        
-    else:
-        print(f'Value {game_id} does not exist in the DataFrame')
-        game_id = ""
-
-    
-def get_players():
-         players_id = 2#
-
-print(cont)
-while cont != "N":
-     play_game(game_id,player_id)
-     cont = input("press any key for next team to play or N to exit")
-     
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = GameApp(root)
+    root.mainloop()
