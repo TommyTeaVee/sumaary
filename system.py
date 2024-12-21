@@ -21,7 +21,9 @@ class GameApp:
         self.root = root
         self.root.title("30 Seconds Game")
         self.game_id = None
-        self.player_id = 1
+        self.player_id = None
+        self.players = []
+        self.current_player_index = 0
         self.score = 0
 
         self.setup_ui()
@@ -45,6 +47,22 @@ class GameApp:
         self.create_game_button = tk.Button(self.game_frame, text="Create Game", command=self.create_game)
         self.create_game_button.grid(row=0, column=3, padx=5)
 
+        # Player Identification Frame
+        self.player_frame = tk.Frame(self.root)
+        self.player_frame.pack(pady=10)
+
+        self.player_label = tk.Label(self.player_frame, text="Players:")
+        self.player_label.grid(row=0, column=0, padx=5)
+
+        self.player_entry = tk.Entry(self.player_frame)
+        self.player_entry.grid(row=0, column=1, padx=5)
+
+        self.add_player_button = tk.Button(self.player_frame, text="Add Player", command=self.add_player)
+        self.add_player_button.grid(row=0, column=2, padx=5)
+
+        self.players_list_label = tk.Label(self.player_frame, text="No players added.")
+        self.players_list_label.grid(row=1, column=0, columnspan=3, pady=5)
+
         # Achievements Frame
         self.achievement_frame = tk.Frame(self.root)
         self.achievement_frame.pack(pady=10)
@@ -58,6 +76,13 @@ class GameApp:
         self.tree.heading("Stars", text="Stars")
         self.tree.pack()
 
+        # Dice Roll Button
+        self.dice_frame = tk.Frame(self.root)
+        self.dice_frame.pack(pady=10)
+
+        self.roll_dice_button = tk.Button(self.dice_frame, text="Roll Dice", command=self.roll_dice)
+        self.roll_dice_button.pack()
+
     def get_game_list(self):
         """Fetch the list of games from the database"""
         df = pd.read_sql("SELECT game_id, game_name FROM game", cnxn)
@@ -69,7 +94,12 @@ class GameApp:
             messagebox.showerror("Error", "Please select a game.")
             return
 
+        if not self.players:
+            messagebox.showerror("Error", "Please add at least one player.")
+            return
+
         self.game_id = int(self.game_combo.get().split(" - ")[0])
+        self.current_player_index = 0
         self.play_game()
 
     def create_game(self):
@@ -101,24 +131,46 @@ class GameApp:
 
         tk.Button(new_game_window, text="Save", command=save_game).grid(row=2, column=0, columnspan=2, pady=10)
 
-    def play_game(self):
-        """Play the game"""
-        mixer.init()
-        mixer.music.load("./drumroll-93348.mp3")
-        mixer.music.play()
+    def add_player(self):
+        """Add a player to the game"""
+        player_name = self.player_entry.get()
 
+        if not player_name:
+            messagebox.showerror("Error", "Player name cannot be empty.")
+            return
+
+        self.players.append(player_name)
+        self.player_entry.delete(0, tk.END)
+        self.update_players_list()
+
+    def update_players_list(self):
+        """Update the list of players displayed"""
+        self.players_list_label.config(text=f"Players: {', '.join(self.players)}")
+
+    def roll_dice(self):
+        """Roll the dice for the current player"""
+        if not self.players:
+            messagebox.showerror("Error", "No players to roll dice for.")
+            return
+
+        current_player = self.players[self.current_player_index]
         dice_roll = pd.read_sql("SELECT dbo.fn_roll_dice() AS dice_roll", cnxn).iloc[0]["dice_roll"]
-        messagebox.showinfo("Dice Roll", f"You rolled: {dice_roll}")
+        messagebox.showinfo("Dice Roll", f"{current_player} rolled: {dice_roll}")
 
         score = int(self.score) - dice_roll
         self.score = score
 
         # Update achievements
-        self.tree.insert("", "end", values=("Player 1", score, "⭐" * min(score, 5)))
-        
-        if score > 3:
-            mixer.music.load("./mega-horn-angry-siren-f-cinematic-trailer-sound-effects-193408.mp3")
-            mixer.music.play()
+        self.tree.insert("", "end", values=(current_player, score, "⭐" * min(score, 5)))
+
+        # Switch to the next player
+        self.current_player_index = (self.current_player_index + 1) % len(self.players)
+
+    def play_game(self):
+        """Play the game"""
+        mixer.init()
+        mixer.music.load("./drumroll-93348.mp3")
+        mixer.music.play()
 
 if __name__ == "__main__":
     root = tk.Tk()
