@@ -21,10 +21,9 @@ class GameApp:
         self.root = root
         self.root.title("30 Seconds Game")
         self.game_id = None
-        self.player_id = None
-        self.players = []
+        self.teams = []  # List of teams, each team contains a list of players
+        self.current_team_index = 0
         self.current_player_index = 0
-        self.score = 0
 
         self.setup_ui()
 
@@ -47,21 +46,30 @@ class GameApp:
         self.create_game_button = tk.Button(self.game_frame, text="Create Game", command=self.create_game)
         self.create_game_button.grid(row=0, column=3, padx=5)
 
-        # Player Identification Frame
-        self.player_frame = tk.Frame(self.root)
-        self.player_frame.pack(pady=10)
+        # Team Management Frame
+        self.team_frame = tk.Frame(self.root)
+        self.team_frame.pack(pady=10)
 
-        self.player_label = tk.Label(self.player_frame, text="Players:")
-        self.player_label.grid(row=0, column=0, padx=5)
+        self.team_label = tk.Label(self.team_frame, text="Team Name:")
+        self.team_label.grid(row=0, column=0, padx=5)
 
-        self.player_entry = tk.Entry(self.player_frame)
-        self.player_entry.grid(row=0, column=1, padx=5)
+        self.team_entry = tk.Entry(self.team_frame)
+        self.team_entry.grid(row=0, column=1, padx=5)
 
-        self.add_player_button = tk.Button(self.player_frame, text="Add Player", command=self.add_player)
-        self.add_player_button.grid(row=0, column=2, padx=5)
+        self.add_team_button = tk.Button(self.team_frame, text="Add Team", command=self.add_team)
+        self.add_team_button.grid(row=0, column=2, padx=5)
 
-        self.players_list_label = tk.Label(self.player_frame, text="No players added.")
-        self.players_list_label.grid(row=1, column=0, columnspan=3, pady=5)
+        self.player_label = tk.Label(self.team_frame, text="Player Name:")
+        self.player_label.grid(row=1, column=0, padx=5)
+
+        self.player_entry = tk.Entry(self.team_frame)
+        self.player_entry.grid(row=1, column=1, padx=5)
+
+        self.add_player_button = tk.Button(self.team_frame, text="Add Player", command=self.add_player)
+        self.add_player_button.grid(row=1, column=2, padx=5)
+
+        self.team_list_label = tk.Label(self.team_frame, text="No teams added.")
+        self.team_list_label.grid(row=2, column=0, columnspan=3, pady=5)
 
         # Achievements Frame
         self.achievement_frame = tk.Frame(self.root)
@@ -70,7 +78,8 @@ class GameApp:
         self.achievement_label = tk.Label(self.achievement_frame, text="Player Achievements")
         self.achievement_label.pack()
 
-        self.tree = Treeview(self.achievement_frame, columns=("Player", "Score", "Stars"), show="headings")
+        self.tree = Treeview(self.achievement_frame, columns=("Team", "Player", "Score", "Stars"), show="headings")
+        self.tree.heading("Team", text="Team")
         self.tree.heading("Player", text="Player")
         self.tree.heading("Score", text="Score")
         self.tree.heading("Stars", text="Stars")
@@ -94,11 +103,12 @@ class GameApp:
             messagebox.showerror("Error", "Please select a game.")
             return
 
-        if not self.players:
-            messagebox.showerror("Error", "Please add at least one player.")
+        if not self.teams:
+            messagebox.showerror("Error", "Please add at least one team and players.")
             return
 
         self.game_id = int(self.game_combo.get().split(" - ")[0])
+        self.current_team_index = 0
         self.current_player_index = 0
         self.play_game()
 
@@ -131,48 +141,57 @@ class GameApp:
 
         tk.Button(new_game_window, text="Save", command=save_game).grid(row=2, column=0, columnspan=2, pady=10)
 
+    def add_team(self):
+        """Add a new team"""
+        team_name = self.team_entry.get()
+
+        if not team_name:
+            messagebox.showerror("Error", "Team name cannot be empty.")
+            return
+
+        self.teams.append({"name": team_name, "players": [], "score": 0})
+        self.team_entry.delete(0, tk.END)
+        self.update_team_list()
+
     def add_player(self):
-        """Add a player to the game"""
+        """Add a player to the current team"""
         player_name = self.player_entry.get()
 
         if not player_name:
             messagebox.showerror("Error", "Player name cannot be empty.")
             return
 
-        self.players.append(player_name)
-        self.player_entry.delete(0, tk.END)
-        self.update_players_list()
+        if not self.teams:
+            messagebox.showerror("Error", "Please add a team first.")
+            return
 
-    def update_players_list(self):
-        """Update the list of players displayed"""
-        self.players_list_label.config(text=f"Players: {', '.join(self.players)}")
+        self.teams[-1]["players"].append({"name": player_name, "score": 0})
+        self.player_entry.delete(0, tk.END)
+        self.update_team_list()
+
+    def update_team_list(self):
+        """Update the list of teams and players displayed"""
+        team_text = "\n".join(
+            [
+                f"Team {team['name']}: {', '.join([player['name'] for player in team['players']])}"
+                for team in self.teams
+            ]
+        )
+        self.team_list_label.config(text=f"Teams:\n{team_text}")
 
     def roll_dice(self):
         """Roll the dice for the current player"""
-        if not self.players:
-            messagebox.showerror("Error", "No players to roll dice for.")
+        if not self.teams:
+            messagebox.showerror("Error", "No teams available.")
             return
 
-        current_player = self.players[self.current_player_index]
-        dice_roll = pd.read_sql("SELECT dbo.fn_roll_dice() AS dice_roll", cnxn).iloc[0]["dice_roll"]
-        messagebox.showinfo("Dice Roll", f"{current_player} rolled: {dice_roll}")
+        current_team = self.teams[self.current_team_index]
+        current_player = current_team["players"][self.current_player_index]
 
-        score = int(self.score) - dice_roll
-        self.score = score
+        dice_roll = int(input(f"{current_player['name']}, enter your dice roll: "))
+        current_player["score"] -= dice_roll
+        current_team["score"] += dice_roll
 
-        # Update achievements
-        self.tree.insert("", "end", values=(current_player, score, "⭐" * min(score, 5)))
-
-        # Switch to the next player
-        self.current_player_index = (self.current_player_index + 1) % len(self.players)
-
-    def play_game(self):
-        """Play the game"""
-        mixer.init()
-        mixer.music.load("./drumroll-93348.mp3")
-        mixer.music.play()
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = GameApp(root)
-    root.mainloop()
+        self.tree.insert(
+            "", "end", values=(current_team["name"], current_player["name"], current_player["score"], "⭐" * min(current_player["score"], 5))
+        )
