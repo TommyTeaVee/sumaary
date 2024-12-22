@@ -1,0 +1,74 @@
+-- Create Games Table
+CREATE TABLE Games (
+    GameID INT IDENTITY(1,1) PRIMARY KEY,
+    Name NVARCHAR(255) NOT NULL,
+    Teams NVARCHAR(MAX) NOT NULL,
+    CreatedAt DATETIME DEFAULT GETDATE()
+);
+
+-- Create Teams Table
+CREATE TABLE Teams (
+    TeamID INT IDENTITY(1,1) PRIMARY KEY,
+    GameID INT NOT NULL,
+    Name NVARCHAR(255) NOT NULL,
+    Score INT DEFAULT 0,
+    FOREIGN KEY (GameID) REFERENCES Games(GameID)
+);
+
+-- Create Members Table
+CREATE TABLE Members (
+    MemberID INT IDENTITY(1,1) PRIMARY KEY,
+    TeamID INT NOT NULL,
+    Name NVARCHAR(255) NOT NULL,
+    Email NVARCHAR(255) NOT NULL,
+    FOREIGN KEY (TeamID) REFERENCES Teams(TeamID)
+);
+
+-- Create Questions Table
+CREATE TABLE Questions (
+    QuestionID INT IDENTITY(1,1) PRIMARY KEY,
+    Question NVARCHAR(MAX) NOT NULL,
+    OptionA NVARCHAR(255) NOT NULL,
+    OptionB NVARCHAR(255) NOT NULL,
+    OptionC NVARCHAR(255) NOT NULL,
+    OptionD NVARCHAR(255) NOT NULL,
+    CorrectAnswer NVARCHAR(255) NOT NULL
+);
+
+-- Create GameProgress Table
+CREATE TABLE GameProgress (
+    ProgressID INT IDENTITY(1,1) PRIMARY KEY,
+    GameID INT NOT NULL,
+    CurrentTeamID INT NOT NULL,
+    CurrentMemberID INT NOT NULL,
+    TimeLeft INT NOT NULL,
+    FOREIGN KEY (GameID) REFERENCES Games(GameID),
+    FOREIGN KEY (CurrentTeamID) REFERENCES Teams(TeamID),
+    FOREIGN KEY (CurrentMemberID) REFERENCES Members(MemberID)
+);
+
+-- Insert Sample Data into Games Table
+INSERT INTO Games (Name, Teams) VALUES 
+('Trivia Night', '');
+
+-- Insert Sample Data into Teams Table
+INSERT INTO Teams (GameID, Name) VALUES 
+(1, 'Team Alpha'),
+(1, 'Team Beta');
+
+-- Insert Sample Data into Members Table
+INSERT INTO Members (TeamID, Name, Email) VALUES 
+(1, 'Alice', 'alice@example.com'),
+(1, 'Bob', 'bob@example.com'),
+(2, 'Charlie', 'charlie@example.com'),
+(2, 'Dana', 'dana@example.com');
+
+-- Insert Sample Data into Questions Table
+INSERT INTO Questions (Question, OptionA, OptionB, OptionC, OptionD, CorrectAnswer) VALUES 
+('What is the capital of France?', 'Paris', 'London', 'Berlin', 'Madrid', 'Paris'),
+('How many legs does a spider have?', '6', '8', '4', '10', '8'),
+('What is 5 + 7?', '10', '12', '14', '8', '12');
+
+-- Insert Sample Data into GameProgress Table
+INSERT INTO GameProgress (GameID, CurrentTeamID, CurrentMemberID, TimeLeft) VALUES 
+(1, 1, 1, 30);
